@@ -1,0 +1,12 @@
+services:
+  server:
+    build: "server/"
+    image: "server:v2"
+    ports:
+      - "7070:7070"
+
+  client:
+      build: "client/"
+      depends_on: [server]
+      image: "client:v1"
+
