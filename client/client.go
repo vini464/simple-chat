@@ -53,7 +53,12 @@ func handleConnection(conn net.Conn, end_chan chan bool) {
 
 		case data2 := <-keyboard_input:
 			if can_send && len(data2) > 0 {
-				data_to_send <- []byte(data2)
+        msg := utils.Message{Cmd: "message", Data: data2}
+        serialized, err := utils.SerializeJson(msg)
+        if (err != nil) {
+          fmt.Println("[error] - error while serializing\n", err)
+        }
+        data_to_send <- serialized
 			}
 		}
 	}

@@ -4,11 +4,11 @@ create_network:
 build_images:
 	docker-compose build
 
-all: build_images
-	docker-compose up 
+all: 
+	docker-compose up --build 
 
-run_server: build_images
+run_server: 
 	docker run --rm --network internet --name server server:v1
 
-run_client: build_images
+run_client: 
 	docker run -it --rm --network internet --name client client:v1

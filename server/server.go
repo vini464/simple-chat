@@ -46,10 +46,25 @@ func handleClient(conn net.Conn) {
 	wg_clients.Add(1)
 	go utils.SendHandler(conn, data_to_send, &wg_clients)
 	for {
-		msg := <-receive_channel
-		fmt.Println("[debug] - received:", string(msg))
-    response := "[server]: i received: " + string(msg)
-		data_to_send <- []byte(response)
+		income := <-receive_channel
+//		fmt.Println("[debug] - received:", string(income))
+    var message utils.Message
+    utils.DeserializeToJson(income, &message)
+    switch message.Cmd{
+    case "message":
+      fmt.Println("[debug]: received message:", message.Data)
+ //   response := "[server]: i received: " + string(income)
+      response := utils.Message{Cmd: "message", Data: "[server]: i received "+ message.Data}
+      serialized, err := utils.SerializeJson(response)
+      if err != nil {
+        fmt.Println("[error] - error while serializing:", err)
+      } else {
+        data_to_send <- serialized
+      }
+      
+    default:
+      fmt.Println("[debug]: unknow command")
+    }
 	}
 	wg_clients.Wait()
 }
