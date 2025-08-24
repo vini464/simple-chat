@@ -22,21 +22,56 @@ func main() {
 	input_channel := make(chan string)
 	var wg_main sync.WaitGroup
 	defer wg_main.Wait()
-	scanner := bufio.NewScanner(os.Stdin)
 	conn, err := net.Dial(SERVER_TYPE, SERVER_PATH)
 	if err != nil {
 		fmt.Println("[error] - algo deu errado!")
 		panic(err)
 	}
-	fmt.Println("Insert your username: ")
-	scanner.Scan()
-	USERNAME = scanner.Text()
 
 	wg_main.Add(1)
-	go handleConnection(conn, &wg_main, send_channel, receive_channel, input_channel)
+	//	go handleConnection(conn, &wg_main, send_channel, receive_channel, input_channel)
 	reading_state := "paused"
 	wg_main.Add(1)
 	go handleKeyboard(input_channel, &reading_state, &wg_main)
+	wg_main.Add(1)
+	go utils.ReceiveHandler(conn, receive_channel, &wg_main)
+	wg_main.Add(1)
+	go utils.SendHandler(conn, send_channel, &wg_main)
+
+  
+	for !set_username(input_channel, send_channel, receive_channel, &reading_state){}
+
+}
+
+func set_username(input_channel chan string, send_channel chan []byte, receive_channel chan []byte, reading_state *string) bool {
+	fmt.Println("username:")
+	*reading_state = "ready"
+	USERNAME = <-input_channel
+	*reading_state = "paused"
+	msg := utils.Message{Cmd: "set_user", Data: USERNAME}
+	serialized, err := utils.SerializeJson(msg)
+	if err != nil {
+		fmt.Println("[error] - error while serializing\n", err)
+	}
+	send_channel <- serialized
+
+	received := <-receive_channel
+	var received_data utils.Message
+	err = utils.DeserializeToJson(received, &received_data)
+	if err != nil {
+		fmt.Println("[error] - error while deserializing:", err)
+		return false
+	} else {
+		switch received_data.Cmd {
+		case "set_user":
+			if received_data.Data == "ok" {
+				return true
+			}
+			return false
+		default:
+			return false
+		}
+	}
 }
 
 func handleConnection(conn net.Conn, wg_main *sync.WaitGroup, send_channel chan []byte, receive_channel chan []byte, input_channel chan string) {
@@ -53,18 +88,18 @@ func handleConnection(conn net.Conn, wg_main *sync.WaitGroup, send_channel chan 
 	for {
 		select {
 		case data := <-receive_channel:
-      var received_data utils.Message
-      err := utils.DeserializeToJson(data, &received_data)
-      if (err != nil) {
-        fmt.Println("[error] - error while deserializing:", err)
-      } else {
-        switch received_data.Cmd {
-        case "message":
-          fmt.Println(received_data.Data)
-        default:
-          fmt.Println("[error] - dont know what to do")
-        }
-      }
+			var received_data utils.Message
+			err := utils.DeserializeToJson(data, &received_data)
+			if err != nil {
+				fmt.Println("[error] - error while deserializing:", err)
+			} else {
+				switch received_data.Cmd {
+				case "message":
+					fmt.Println(received_data.Data)
+				default:
+					fmt.Println("[error] - dont know what to do")
+				}
+			}
 
 		case data2 := <-input_channel:
 			if can_send && len(data2) > 0 {
@@ -82,17 +117,17 @@ func handleConnection(conn net.Conn, wg_main *sync.WaitGroup, send_channel chan 
 func handleKeyboard(keyboard_input chan string, reading_state *string, wg_main *sync.WaitGroup) {
 	defer wg_main.Done()
 	scanner := bufio.NewScanner(os.Stdin)
-  loop:
-  for {
-    switch *reading_state {
-    case "paused":
-      continue
-    case "stopped":
-      break loop
-    default:
-      scanner.Scan()
-      input := scanner.Text()
-      keyboard_input <- input
-    }
-  }
+loop:
+	for {
+		switch *reading_state {
+		case "paused":
+			continue
+		case "stopped":
+			break loop
+		default:
+			scanner.Scan()
+			input := scanner.Text()
+			keyboard_input <- input
+		}
+	}
 }
