@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"vini464/simple-chat/communication"
+	"vini464/simple-chat/utils"
 )
 
 const (
@@ -42,9 +42,9 @@ func handleClient(conn net.Conn) {
 	receive_channel := make(chan []byte)
 	data_to_send := make(chan []byte)
 	wg_clients.Add(1)
-	go communication.ReceiveHandler(conn, receive_channel, &wg_clients)
+	go utils.ReceiveHandler(conn, receive_channel, &wg_clients)
 	wg_clients.Add(1)
-	go communication.SendHandler(conn, data_to_send, &wg_clients)
+	go utils.SendHandler(conn, data_to_send, &wg_clients)
 	for {
 		msg := <-receive_channel
 		fmt.Println("[debug] - received:", string(msg))
