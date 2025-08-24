@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-  "github.com/vini464/simple-chat/communication"
+	"sync"
+	"vini464/simple-chat/communication"
 )
 
 const (
-	SERVER_PATH = "localhost:7070"
+	SERVER_PATH = "server:7070"
 	SERVER_TYPE = "tcp"
 )
 
@@ -34,29 +35,30 @@ func main() {
 }
 
 func handleConnection(conn net.Conn, end_chan chan bool) {
-	received_data := make(chan string)
-	data_to_send := make(chan string)
+  var wg_server sync.WaitGroup
+  defer wg_server.Wait()
+	received_data := make(chan []byte)
+	data_to_send := make(chan []byte)
 	keyboard_input := make(chan string)
 
 	go handleKeyboard(keyboard_input)
-	// go handleReceive(conn, received_data)
-  go communication.handleReceive(conn, received_data)
-	// go handleSend(conn, data_to_send)
+  wg_server.Add(1)
+  go communication.ReceiveHandler(conn, received_data, &wg_server) 
+  wg_server.Add(1)
+  go communication.SendHandler(conn, data_to_send, &wg_server)
 
 	can_send := true
 	for {
 		select {
 		case data := <-received_data:
-			fmt.Println(data)
+			fmt.Println(string(data))
 
 		case data2 := <-keyboard_input:
 			if can_send {
-				data_to_send <- data2
-
+				data_to_send <- []byte(data2)
 			}
-		}
+    }
 	}
-	end_chan <- true
 }
 
 func handleKeyboard(keyboard_input chan string) {
@@ -64,10 +66,9 @@ func handleKeyboard(keyboard_input chan string) {
 
 	for {
 
-		fmt.Print(USERNAME + ": ")
+//		fmt.Print(USERNAME + ": ")
 		scanner.Scan()
 		input := scanner.Text()
-		fmt.Println(input)
 		keyboard_input <- input
 	}
 }

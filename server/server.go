@@ -1,14 +1,14 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
+	"sync"
+	"vini464/simple-chat/communication"
 )
 
 const (
-	SERVER_HOST = "localhost"
+	SERVER_HOST = "server"
 	SERVER_PORT = "7070"
 	SERVER_TYPE = "tcp"
 	SERVER_PATH = SERVER_HOST + ":" + SERVER_PORT
@@ -21,7 +21,7 @@ func main() {
 	if err != nil {
 		fmt.Println("[error] Ocorreu um erro:", err.Error())
 	}
-	fmt.Println("[log] Escutando na porta:", SERVER_PORT)
+  fmt.Println("[log] Escutando em:", listener.Addr())
 	defer listener.Close()
 	for {
 		conn, err := listener.Accept()
@@ -31,84 +31,28 @@ func main() {
 		}
 		go handleClient(conn)
 	}
+
 }
 
 func handleClient(conn net.Conn) {
 	defer conn.Close()
+	var wg_clients sync.WaitGroup
 	fmt.Println("[log] Novo cliente:", conn.RemoteAddr().String())
 	//	send_channel := make(chan string)
-	receive_channel := make(chan string)
-	data_to_send := make(chan string)
-
-	//	go sender(conn, send_channel)
-	go receiver(conn, receive_channel)
-	go sender(conn, data_to_send)
-
-	<-receive_channel
-
-}
-
-func sender(conn net.Conn, msg chan string) {
+	receive_channel := make(chan []byte)
+	data_to_send := make(chan []byte)
+	wg_clients.Add(1)
+	go communication.ReceiveHandler(conn, receive_channel, &wg_clients)
+	wg_clients.Add(1)
+	go communication.SendHandler(conn, data_to_send, &wg_clients)
 	for {
-		data := <-msg
-		size := uint32(len(data))
-		header := make([]byte, 4)
-
-		binary.BigEndian.PutUint32(header, size)
-		_, err := conn.Write(header)
-		if err != nil {
-			fmt.Println("[error] - connection lost")
-			return
-		}
-		_, err = conn.Write([]byte(data))
-		if err != nil {
-			fmt.Println("[error] - connection lost")
-			return
-		}
+		msg := <-receive_channel
+		fmt.Println("[debug] - received:", string(msg))
+    response := "[server]: i received: " + string(msg)
+		data_to_send <- []byte(response)
 	}
+	wg_clients.Wait()
 }
 
-func receiver(conn net.Conn, receive_channel chan string) {
-	header := make([]byte, 4)
-	msg := ""
-	// Loop de espera pela mensagem
-	for {
-		_, err := conn.Read(header)
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println("[log] O cliente encerrou a conexão")
-			} else {
-				fmt.Println("[error] O client foi desconectado:", err.Error())
-			}
-			receive_channel <- "finished"
-			return // encerra a função caso algum erro tenha ocorrido
-		}
-		// loop de leitura da mensagem
-		size := binary.BigEndian.Uint32(header)
-		data := make([]byte, int(size))
-		readed := 0
-		fmt.Println("[debug] - expecting", int(size), "bytes")
-		for strLen, err := conn.Read(data); readed < int(size) || err != nil; {
-			fmt.Println("strLen: ", strLen)
-			if err != nil {
-				if err == io.EOF {
-					fmt.Println("[log] O cliente encerrou a conexão")
-				} else {
-					fmt.Println("[error] O client foi desconectado:", err.Error())
-				}
-				receive_channel <- "finished"
-				return // encerra a função caso algum erro tenha ocorrido
-			}
-
-			msg += string(data[:strLen])
-			readed += strLen
-			strLen = 0
-		}
-		if readed == int(size) && msg != "" {
-			fmt.Println("[log] received message from client", conn.RemoteAddr().String(), ":", msg)
-			msg = ""
-		}
-	}
-	// TODO: create a simple protocol like: {method: "name"; data: "info"}
-	// TODO: create a handler for each message
-}
+// TODO: create a simple protocol like: {method: "name"; data: "info"}
+// TODO: create a handler for each message

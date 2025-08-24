@@ -1,12 +1,24 @@
 services:
   server:
-    build: "server/"
-    image: "server:v2"
+    build:
+      context: "./"
+      dockerfile: "./server.Dockerfile"
+    image: "server:v1"
+    container_name: "server"
     ports:
       - "7070:7070"
+    networks:
+      - internet
 
   client:
-      build: "client/"
-      depends_on: [server]
-      image: "client:v1"
-
+    build: 
+      context: "./"
+      dockerfile: "./client.Dockerfile"
+    depends_on: [server]
+    image: "client:v1"
+    container_name: "client"
+    networks:
+      - internet
+networks:
+  internet:
+    external: true
