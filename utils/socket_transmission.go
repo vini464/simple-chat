@@ -59,6 +59,6 @@ func SendHandler(conn net.Conn, msg chan []byte, wg *sync.WaitGroup) {
       wg.Done()
 			return
 		}
-    fmt.Println("data sent")
+//    fmt.Println("data sent")
 	}
 }

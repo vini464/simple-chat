@@ -11,4 +11,4 @@ run_server:
 	docker run --rm --network internet --name server server:v1
 
 run_client: 
-	docker run -it --rm --network internet --name client client:v1
+	docker run -it --rm --network internet --name $(NAME) client:v1

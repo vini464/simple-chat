@@ -37,8 +37,10 @@ func main() {
 	go utils.ReceiveHandler(conn, receive_channel, &wg_main)
 	wg_main.Add(1)
 	go utils.SendHandler(conn, send_channel, &wg_main)
-
-	for !set_username(input_channel, send_channel, receive_channel, &reading_state) {
+  
+  tmp := false
+	for !tmp {
+    tmp = set_username(input_channel, send_channel, receive_channel, &reading_state) 
 	}
 
 	reading_state = "ready"
@@ -54,9 +56,10 @@ main_loop:
 				serialized, err := utils.SerializeJson(msg)
 				if err != nil {
 					fmt.Println("[debug] - error while serializing:", err)
-				} else {
+				} else if data != "\n" {
 					send_channel <- serialized
 				}
+				wg_main.Done()
 				wg_main.Done()
 				wg_main.Done()
 				break main_loop
@@ -111,54 +114,19 @@ func set_username(input_channel chan string, send_channel chan []byte, receive_c
 		switch received_data.Cmd {
 		case "set_user":
 			if received_data.Data == "ok" {
+        fmt.Println("username saved")
 				return true
 			}
+      fmt.Println("set user error")
 			return false
 		default:
+      fmt.Println("default - data:", received_data.Data)
+
 			return false
 		}
 	}
 }
 
-func handleConnection(conn net.Conn, wg_main *sync.WaitGroup, send_channel chan []byte, receive_channel chan []byte, input_channel chan string) {
-	var wg_server sync.WaitGroup
-	defer wg_server.Wait()
-	defer wg_main.Done()
-
-	wg_server.Add(1)
-	go utils.ReceiveHandler(conn, receive_channel, &wg_server)
-	wg_server.Add(1)
-	go utils.SendHandler(conn, send_channel, &wg_server)
-
-	can_send := true
-	for {
-		select {
-		case data := <-receive_channel:
-			var received_data utils.Message
-			err := utils.DeserializeToJson(data, &received_data)
-			if err != nil {
-				fmt.Println("[error] - error while deserializing:", err)
-			} else {
-				switch received_data.Cmd {
-				case "message":
-					fmt.Println(received_data.Data)
-				default:
-					fmt.Println("[error] - dont know what to do")
-				}
-			}
-
-		case data2 := <-input_channel:
-			if can_send && len(data2) > 0 {
-				msg := utils.Message{Cmd: "message", Data: data2}
-				serialized, err := utils.SerializeJson(msg)
-				if err != nil {
-					fmt.Println("[error] - error while serializing\n", err)
-				}
-				send_channel <- serialized
-			}
-		}
-	}
-}
 
 func handleKeyboard(keyboard_input chan string, reading_state *string, wg_main *sync.WaitGroup) {
 	defer wg_main.Done()
