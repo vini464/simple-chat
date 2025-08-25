@@ -38,9 +38,55 @@ func main() {
 	wg_main.Add(1)
 	go utils.SendHandler(conn, send_channel, &wg_main)
 
-  
-	for !set_username(input_channel, send_channel, receive_channel, &reading_state){}
+	for !set_username(input_channel, send_channel, receive_channel, &reading_state) {
+	}
 
+	reading_state = "ready"
+	in_room := false
+
+main_loop:
+	for {
+		select {
+		case data := <-input_channel:
+			if data == ":q" {
+				reading_state = "stopped"
+				msg := utils.Message{Cmd: "quit", Data: USERNAME}
+				serialized, err := utils.SerializeJson(msg)
+				if err != nil {
+					fmt.Println("[debug] - error while serializing:", err)
+				} else {
+					send_channel <- serialized
+				}
+				wg_main.Done()
+				wg_main.Done()
+				break main_loop
+			} else if in_room {
+				msg := utils.Message{Cmd: "message", Data: data}
+				serialized, err := utils.SerializeJson(msg)
+				if err != nil {
+					fmt.Println("[error] - error while serializing:", err)
+				} else {
+					send_channel <- serialized
+				}
+			}
+		case received_data := <-receive_channel:
+			var msg utils.Message
+			err := utils.DeserializeToJson(received_data, &msg)
+			if err != nil {
+				fmt.Println("[error] - error while deserializing:", err)
+			} else {
+				switch msg.Cmd{
+        case "message":
+          fmt.Println(msg.Data)
+        case "allocated":
+          fmt.Println("You are now in a room with:", msg.Data)
+          in_room = true
+        default:
+          fmt.Println("dont know what to do yet")
+				}
+			}
+		}
+	}
 }
 
 func set_username(input_channel chan string, send_channel chan []byte, receive_channel chan []byte, reading_state *string) bool {
