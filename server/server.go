@@ -7,7 +7,9 @@ import (
 	"vini464/simple-chat/utils"
 )
 
-var CLIENTS = make(map[string]net.Conn)
+var CLIENTS = make(map[string]chan utils.Message)
+var QUEUE   = make([]string, 0)
+var ROOMS   = make(map[string]string)
 
 const (
 	SERVER_HOST = "server"
@@ -42,6 +44,7 @@ func handleClient(conn net.Conn) {
 	var wg_clients sync.WaitGroup
 	receive_channel := make(chan []byte)
 	data_to_send := make(chan []byte)
+  self_channel := make(chan utils.Message)
 
 	defer conn.Close()
 	defer wg_clients.Wait()
@@ -61,34 +64,47 @@ func handleClient(conn net.Conn) {
 		utils.DeserializeToJson(income, &message)
 		switch message.Cmd {
 		case "message":
-			fmt.Println("[debug]: received message:", message.Data)
-			response := utils.Message{Cmd: "message", Data: "[server]: i received " + message.Data}
-			serialized, err := utils.SerializeJson(response)
-			for err != nil {
-				fmt.Println("[error] - error while serializing:", err)
-				serialized, err = utils.SerializeJson(response)
-			}
-			data_to_send <- serialized
-
+			_, ok := ROOMS[username]
+      if ok {
+        msg := utils.Message{Cmd: "message", Data: "["+username+"]:"+ message.Data}
+        CLIENTS[ROOMS[username]] <- msg
+      } 
 		case "set_user":
 			var response utils.Message
 			_, ok := CLIENTS[message.Data]
 			if ok {
 				response = utils.Message{Cmd: "error", Data: "invalid user"}
+        sendResponse(response, data_to_send)
 			} else {
 				response = utils.Message{Cmd: "ok", Data: "user saved"}
-				CLIENTS[message.Data] = conn
+				CLIENTS[message.Data] = self_channel
         username = message.Data
+        sendResponse(response, data_to_send)
+        if (len(QUEUE) == 0) {
+          QUEUE = utils.Enqueue(QUEUE, username)
+        } else {
+          var other string
+          other, QUEUE = utils.Dequeue(QUEUE)
+          ROOMS[username] = other
+          ROOMS[other] = username
+          response := utils.Message{Cmd: "allocated", Data: username}
+          CLIENTS[other] <-response
+          response = utils.Message{Cmd: "allocated", Data: other}
+          sendResponse(response, data_to_send)
+        }
 			}
-			serialized, err := utils.SerializeJson(response)
-			for err != nil {
-				fmt.Println("[error] - error while serializing:", err)
-				serialized, err = utils.SerializeJson(response)
-			}
-			data_to_send <- serialized
-
 		default:
 			fmt.Println("[debug]: unknow command")
 		}
 	}
 }
+
+func sendResponse(msg utils.Message, send_channel chan []byte) {
+			serialized, err := utils.SerializeJson(msg)
+			for err != nil {
+				fmt.Println("[error] - error while serializing:", err)
+				serialized, err = utils.SerializeJson(msg)
+			}
+			send_channel <- serialized
+}
+
